@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Geogram Tone Tester</title>
+  <style>
+    body {
+      background-color: #121212;
+      color: #fff;
+      font-family: Arial, sans-serif;
+      text-align: center;
+      padding-top: 50px;
+    }
+    button {
+      margin: 10px;
+      padding: 15px 25px;
+      background-color: #1e1e1e;
+      border: 1px solid #444;
+      border-radius: 5px;
+      color: white;
+      font-size: 16px;
+      cursor: pointer;
+    }
+    button:hover {
+      background-color: #333;
+    }
+  </style>
+</head>
+<body>
+  <h1>Geogram Tone Tester</h1>
+  <button onclick="playTone('high', 200*6)">Play Start Tone</button>
+  <button onclick="playTone('high')">Play High Tone</button>
+  <button onclick="playTone('mid')">Play Mid Tone</button>
+  <button onclick="playTone('low')">Play Low Tone</button>
+  <button onclick="playTone('silent')">Play Silence</button>
+  <button onclick="playSequence()">Play Header + Data</button>
+
+  <script>
+    const context = new (window.AudioContext || window.webkitAudioContext)();
+
+    const frequencies = {
+      high: 1000,
+      mid: 1000,
+      low: 1000
+    };
+
+    const volumes = {
+      high: 1.0,
+      mid: 0.8,
+      low: 0.6,
+      silent: 0.0
+    };
+
+    const duration = 200; // ms
+    const interval = 1400; // ms between tones
+
+    function playTone(level, dur = duration) {
+      const osc = context.createOscillator();
+      const gain = context.createGain();
+
+      osc.type = 'sine';
+      osc.frequency.value = frequencies[level];
+      gain.gain.value = volumes[level];
+
+      osc.connect(gain).connect(context.destination);
+
+      osc.start();
+      osc.stop(context.currentTime + dur / 1000);
+    }
+
+    function playSequence() {
+      const sequence = [
+        { level: 'high', duration: duration * 6, delay: 0 },          // Start long beep
+        { level: 'high', duration: duration,   delay: interval },    // Calibrate high
+        { level: 'mid',  duration: duration,   delay: interval },    // Calibrate mid
+        { level: 'low',  duration: duration,   delay: interval },    // Calibrate low
+        { level: 'silent', duration: duration, delay: interval },    // Silent gap
+        { level: 'mid',  duration: duration,   delay: interval },    // Sample data
+        { level: 'low',  duration: duration,   delay: interval },    // Sample data
+        { level: 'high', duration: duration,   delay: interval }     // Sample data
+      ];
+
+      let time = 0;
+      sequence.forEach(tone => {
+        setTimeout(() => playTone(tone.level, tone.duration), time);
+        time += tone.delay + tone.duration;
+      });
+    }
+  </script>
+</body>
+</html>
+
