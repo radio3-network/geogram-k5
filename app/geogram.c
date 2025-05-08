@@ -17,7 +17,7 @@ char String[22];
 
 void GEOGRAM_Hook(void) {
     gGeogramTime++;
-    
+
     // Read mic input
     uint16_t micLevel = BK4819_ReadRegister(0x64) & 0x7FFF;
     bool isSounding = (micLevel > 100);
@@ -28,51 +28,44 @@ void GEOGRAM_Hook(void) {
     static char morseSequence[12] = "";  // Stores current pattern (e.g. ".-.")
     static uint8_t seqPos = 0;
     static char lastDisplay[22] = "No beeps";
+    static bool justUpdated = false;
 
     if (isSounding) {
         if (!inBeep) {
-            // New beep started
             inBeep = true;
             beepStartTime = gGeogramTime;
-            
-            // Check if previous gap was long enough to be a character separator
-            if ((gGeogramTime - lastBeepEndTime) > GAP_THRESHOLD && seqPos > 0) {
-                // Add space between characters
-                strcpy(lastDisplay, morseSequence);
-                morseSequence[0] = '\0';
-                seqPos = 0;
-            }
         }
         lastBeepEndTime = gGeogramTime;
+        justUpdated = false;  // Reset update flag during sound
     } else {
         if (inBeep) {
-            // Beep just ended - classify it
             inBeep = false;
-            uint32_t duration = lastBeepEndTime - beepStartTime;
-            
-            if (seqPos < sizeof(morseSequence)-1) {
-                if (duration < SHORT_BEEP_MAX) {
-                    morseSequence[seqPos++] = '.'; // Short beep = dot
-                } else {
-                    morseSequence[seqPos++] = '-'; // Long beep = dash
-                }
+            uint32_t duration = gGeogramTime - beepStartTime;
+
+            if (seqPos < sizeof(morseSequence) - 1) {
+                morseSequence[seqPos++] = (duration < SHORT_BEEP_MAX) ? '.' : '-';
                 morseSequence[seqPos] = '\0';
-                strcpy(lastDisplay, morseSequence);
             }
+        }
+
+        // Silence gap detection — do this every tick while quiet
+        if (!justUpdated &&
+            (gGeogramTime - lastBeepEndTime > GAP_THRESHOLD) &&
+            (seqPos > 0)) {
+
+            strcpy(lastDisplay, morseSequence);
+            morseSequence[0] = '\0';
+            seqPos = 0;
+            justUpdated = true;  // Prevent re-updating every frame
         }
     }
 
     // Display
     UI_DisplayClear();
-    //UI_PrintString("Morse Detector", 0, 127, 0, 10);
-    
-    //sprintf(String, "Current: %s", morseSequence);
-    //UI_PrintStringSmallNormal(String, 0, 127, 2);
-    
+
     sprintf(String, "Last: %s", lastDisplay);
     UI_PrintStringSmallNormal(String, 0, 127, 4);
-    
-    // Show timing reference (debug)
+
     sprintf(String, "Mic: %u", micLevel);
     UI_PrintStringSmallNormal(String, 0, 127, 6);
 }
