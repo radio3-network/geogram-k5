@@ -10,33 +10,40 @@
 static uint32_t gGeogramTime = 0;
 char String[22];
 
-// Morse detection thresholds (in counts)
-#define SHORT_BEEP_MAX 75   // <75 counts = dot (.)
-#define LONG_BEEP_MIN 75    // ≥75 counts = dash (-)
-#define GAP_THRESHOLD 130   // Gap between characters
+#define SHORT_BEEP_MAX 75
+#define GAP_THRESHOLD 130
+#define RESET_THRESHOLD 400
+#define TRIGGER_SEQUENCE "-.-.-."
 
 void GEOGRAM_Hook(void) {
     gGeogramTime++;
 
-    // Read mic input
     uint16_t micLevel = BK4819_ReadRegister(0x64) & 0x7FFF;
     bool isSounding = (micLevel > 100);
 
     static bool inBeep = false;
     static uint32_t beepStartTime = 0;
     static uint32_t lastBeepEndTime = 0;
-    static char morseSequence[12] = "";  // Stores current pattern (e.g. ".-.")
-    static uint8_t seqPos = 0;
-    static char lastDisplay[22] = "No beeps";
     static bool justUpdated = false;
+
+    static char morseSequence[12] = "";
+    static uint8_t seqPos = 0;
+    static char lastDisplay[22] = "Waiting...";
+    static bool isUnlocked = false;
+    static bool ignoreNextSequence = true;
 
     if (isSounding) {
         if (!inBeep) {
             inBeep = true;
             beepStartTime = gGeogramTime;
+
+            if ((gGeogramTime - lastBeepEndTime) > RESET_THRESHOLD) {
+                isUnlocked = false;
+                ignoreNextSequence = true;
+            }
         }
         lastBeepEndTime = gGeogramTime;
-        justUpdated = false;  // Reset update flag during sound
+        justUpdated = false;
     } else {
         if (inBeep) {
             inBeep = false;
@@ -48,21 +55,35 @@ void GEOGRAM_Hook(void) {
             }
         }
 
-        // Silence gap detection — do this every tick while quiet
         if (!justUpdated &&
             (gGeogramTime - lastBeepEndTime > GAP_THRESHOLD) &&
             (seqPos > 0)) {
 
-            strcpy(lastDisplay, morseSequence);
+            if (!isUnlocked) {
+                if (strcmp(morseSequence, TRIGGER_SEQUENCE) == 0) {
+                    isUnlocked = true;
+                    ignoreNextSequence = false;  // ✅ Fix: don't ignore after trigger
+                    strcpy(lastDisplay, "[START]");
+                } else {
+                    strcpy(lastDisplay, "Waiting...");
+                }
+            } else {
+                if (ignoreNextSequence) {
+                    strcpy(lastDisplay, "Ignoring...");
+                    ignoreNextSequence = false;
+                } else {
+                    strcpy(lastDisplay, morseSequence);
+                }
+            }
+
             morseSequence[0] = '\0';
             seqPos = 0;
-            justUpdated = true;  // Prevent re-updating every frame
+            justUpdated = true;
         }
     }
 
     // Display
     UI_DisplayClear();
-
     sprintf(String, "Last: %s", lastDisplay);
     UI_PrintStringSmallNormal(String, 0, 127, 4);
 
