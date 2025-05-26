@@ -7,6 +7,10 @@
 #include "external/printf/printf.h"
 #include "driver/st7565.h"
 
+
+void processInput(const char *input);
+
+
 static uint32_t gGeogramTime = 0;
 char String[22];
 
@@ -138,6 +142,7 @@ void GEOGRAM_Hook(void) {
             if (decodedPos > 0) {
                 decodedMessage[decodedPos] = '\0';
                 strncpy(lastDisplay, decodedMessage, sizeof(lastDisplay));
+                processInput(lastDisplay);
             }
             decodedMessage[0] = '\0';
             decodedPos = 0;
@@ -152,4 +157,69 @@ void GEOGRAM_Hook(void) {
 
     sprintf(String, "Mic: %u", micLevel);
     UI_PrintStringSmallNormal(String, 0, 127, 6);
+}
+
+
+// Helper: check if character is digit
+int is_digit(char c) {
+    return c >= '0' && c <= '9';
+}
+
+// Helper: string length
+int simple_strlen(const char *s) {
+    int len = 0;
+    while (*s++) len++;
+    return len;
+}
+
+// BK4819_SetFrequency
+void processCommand_M(const char *args) {
+    if (!is_digit(args[0]) || !is_digit(args[1]) || args[2] != ':')
+        return;
+
+    int channel = (args[0] - '0') * 10 + (args[1] - '0');
+
+    const char *freqStr = args + 3;
+    char freqBuf[16];
+    int i = 0;
+    while (i < 15 && ((freqStr[i] >= '0' && freqStr[i] <= '9') || freqStr[i] == '.')) {
+        freqBuf[i] = freqStr[i];
+        i++;
+    }
+    freqBuf[i] = '\0';
+
+    // Parse MHz and kHz as integers to avoid floating point
+    unsigned long mhz = 0, khz = 0;
+    const char *dot = freqBuf;
+    while (*dot && *dot != '.') dot++;
+    if (*dot == '.') {
+        for (int j = 0; j < (dot - freqBuf); ++j)
+            mhz = mhz * 10 + (freqBuf[j] - '0');
+
+        for (int j = 1; j <= 5 && dot[j]; ++j)
+            khz = khz * 10 + (dot[j] - '0');
+
+        while (khz < 10000) khz *= 10; // pad to 5 digits
+    }
+
+    UI_DisplayClear();
+    sprintf(String, "MEM:%d F:%lu.%05lu MHz", channel, mhz, khz);
+    UI_PrintStringSmallNormal(String, 0, 127, 4);
+}
+
+void processInput(const char *input) {
+    if (!input || simple_strlen(input) < 1)
+        return;
+
+    char command = input[0];
+    const char *args = input + 1;
+
+    switch (command) {
+        case 'M':
+            processCommand_M(args);
+            break;
+        // Add future command cases here
+        default:
+            break;
+    }
 }
